@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docktermj/go-xyzzy-helpers/logger"
@@ -37,6 +38,7 @@ const (
 // shuffle is 6206:  https://github.com/Senzing/knowledge-base/blob/main/lists/senzing-product-ids.md
 const MessageIdFormat = "senzing-6206%04d"
 
+var waitGroup sync.WaitGroup
 var (
 	buildIteration string = "0"
 	buildVersion   string = "0.0.0"
@@ -223,26 +225,52 @@ func readGZFile(gzFile string) bool {
 
 // ----------------------------------------------------------------------------
 func shuffleLines(reader io.Reader) {
+	fmt.Println("shuffle lines")
+
+	lineChan := make(chan string, 100)
+	readCountChan := make(chan int, 1)
+	writeCountChan := make(chan int, 1)
+	defer func() {
+		fmt.Println("total lines read:", <-readCountChan)
+		fmt.Println("total lines written:", <-writeCountChan)
+		close(readCountChan)
+		close(writeCountChan)
+	}()
+	waitGroup.Add(2)
+	go readLines(reader, lineChan, readCountChan)
+	go writeLines(lineChan, writeCountChan)
+	waitGroup.Wait()
+	fmt.Println("done wait")
+
 }
 
 // ----------------------------------------------------------------------------
-func readLines(reader io.Reader, lines chan string) {
+func readLines(reader io.Reader, lines chan string, countChan chan int) {
+	defer waitGroup.Done()
 	scanner := bufio.NewScanner(reader)
 	totalLines := 0
 	for scanner.Scan() {
 		totalLines++
 		line := strings.TrimSpace(scanner.Text())
+		fmt.Println("read:", totalLines)
 		lines <- line
 	}
+	close(lines)
+	countChan <- totalLines
+	fmt.Println("exit read")
 }
 
 // ----------------------------------------------------------------------------
-func writeLines(lines chan string) {
+func writeLines(lines chan string, countChan chan int) {
+	defer waitGroup.Done()
 	totalLines := 0
 	for line := range lines {
 		totalLines++
+		fmt.Println("write:", totalLines)
 		fmt.Println(line)
 	}
+	countChan <- totalLines
+	fmt.Println("exit write")
 }
 
 // ----------------------------------------------------------------------------
