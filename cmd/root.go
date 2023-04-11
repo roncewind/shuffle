@@ -6,6 +6,7 @@ package cmd
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"math/rand"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/docktermj/go-xyzzy-helpers/logger"
+	"github.com/roncewind/go-util/util"
 	"github.com/senzing/go-common/record"
 	"github.com/senzing/senzing-tools/constant"
 	"github.com/senzing/senzing-tools/envar"
@@ -46,7 +48,6 @@ var (
 )
 
 var waitGroup sync.WaitGroup
-var shuffleGroup sync.WaitGroup
 
 type shuffleLine struct {
 	line         string
@@ -78,7 +79,6 @@ var RootCmd = &cobra.Command{
 		if !read() {
 			cmd.Help()
 		}
-
 	},
 }
 
@@ -235,7 +235,7 @@ func readGZFile(gzFile string) bool {
 // ----------------------------------------------------------------------------
 func shuffleLines(reader io.Reader) {
 
-	lineChan := make(chan shuffleLine, 100)
+	lineChan := make(chan shuffleLine, 10000)
 	readCountChan := make(chan int, 1)
 	writeCountChan := make(chan int, 1)
 	defer func() {
@@ -243,15 +243,6 @@ func shuffleLines(reader io.Reader) {
 		fmt.Println("total lines written:", <-writeCountChan)
 		close(readCountChan)
 		close(writeCountChan)
-	}()
-
-	//when lines are shuffled, they get readded to the lineChan
-	// so we need to wait for the shuffling to finish and all the line
-	// reads to finish before we close that channel
-	shuffleGroup.Add(1)
-	go func() {
-		shuffleGroup.Wait()
-		close(lineChan)
 	}()
 
 	waitGroup.Add(2)
@@ -263,13 +254,12 @@ func shuffleLines(reader io.Reader) {
 // ----------------------------------------------------------------------------
 func readLines(reader io.Reader, lines chan shuffleLine, countChan chan int) {
 	defer waitGroup.Done()
-	defer shuffleGroup.Done()
 	scanner := bufio.NewScanner(reader)
 	totalLines := 0
 	for scanner.Scan() {
 		totalLines++
 		line := strings.TrimSpace(scanner.Text())
-		fmt.Println("read:", totalLines)
+		// fmt.Println("read:", totalLines)
 		l := shuffleLine{
 			initLineNum:  totalLines,
 			line:         line,
@@ -277,36 +267,48 @@ func readLines(reader io.Reader, lines chan shuffleLine, countChan chan int) {
 		}
 		lines <- l
 	}
+	close(lines)
 	countChan <- totalLines
-	fmt.Println("exit read")
 }
 
 // ----------------------------------------------------------------------------
 func writeLines(lines chan shuffleLine, countChan chan int) {
 	defer waitGroup.Done()
+	var shuffleGroup sync.WaitGroup
 	totalLines := 0
+	bridgeChan := make(chan (<-chan shuffleLine), 10000)
 	for line := range lines {
 		if rand.Intn(10) < 5 {
-			if line.shuffleCount < 5 {
-				//shuffle
-				shuffleGroup.Add(1)
-				line.shuffleCount++
-				go shuffle(lines, line)
-				continue
-			}
+			shuffleGroup.Add(1)
+			//shuffle
+			line.shuffleCount++
+			go shuffle(bridgeChan, line, &shuffleGroup)
+			continue
 		}
 		totalLines++
-		fmt.Printf("%d was %d\n", totalLines, line.initLineNum)
+	}
+
+	// after all the shuffles have happened, close the bridge channel
+	go func() {
+		shuffleGroup.Wait()
+		close(bridgeChan)
+	}()
+
+	for line := range util.Bridge(context.Background(), bridgeChan) {
+		totalLines++
+		fmt.Printf("%d was %d -- %d\n", totalLines, line.initLineNum, line.shuffleCount)
 	}
 	countChan <- totalLines
-	fmt.Println("exit write")
 }
 
 // ----------------------------------------------------------------------------
-func shuffle(lines chan shuffleLine, line shuffleLine) {
-	defer shuffleGroup.Done()
-	time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+func shuffle(bridgeChan chan (<-chan shuffleLine), line shuffleLine, wg *sync.WaitGroup) {
+	lines := make(chan shuffleLine, 1)
+	bridgeChan <- lines
+	time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 	lines <- line
+	close(lines)
+	wg.Done()
 }
 
 // ----------------------------------------------------------------------------
