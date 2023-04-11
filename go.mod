@@ -1,4 +1,4 @@
-module github.com/roncewind/validate
+module github.com/roncewind/shuffle
 
 go 1.20
 
