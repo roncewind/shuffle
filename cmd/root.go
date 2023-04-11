@@ -34,28 +34,28 @@ const (
 	envVarReplacerCharOld string = "-"
 )
 
-// validate is 6203:  https://github.com/Senzing/knowledge-base/blob/main/lists/senzing-product-ids.md
-const MessageIdFormat = "senzing-6203%04d"
+// shuffle is 6206:  https://github.com/Senzing/knowledge-base/blob/main/lists/senzing-product-ids.md
+const MessageIdFormat = "senzing-6206%04d"
 
 var (
 	buildIteration string = "0"
 	buildVersion   string = "0.0.0"
-	programName    string = fmt.Sprintf("move-%d", time.Now().Unix())
+	programName    string = fmt.Sprintf("shuffle-%d", time.Now().Unix())
 )
 
 // ----------------------------------------------------------------------------
 // rootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "validate",
-	Short: "Validates a JSON-lines file.",
+	Use:   "shuffle",
+	Short: "Shuffles a JSON-lines file.",
 	Long: `
-	Welcome to validate!
-	Validate the each line of a JSON-lines (JSONL) file conforms to the Generic Entity Specification.
+	Welcome to shuffle!
+	Shuffle the each line of a JSON-lines (JSONL) file conforms to the Generic Entity Specification.
 
 	Usage example:
 
-	validate --input-url "file:///path/to/json/lines/file.jsonl"
-	validate --input-url "https://public-read-access.s3.amazonaws.com/TestDataSets/SenzingTruthSet/truth-set-3.0.0.jsonl"
+	shuffle --input-url "file:///path/to/json/lines/file.jsonl"
+	shuffle --input-url "https://public-read-access.s3.amazonaws.com/TestDataSets/SenzingTruthSet/truth-set-3.0.0.jsonl"
 	`,
 	PreRun: func(cobraCommand *cobra.Command, args []string) {
 		loadConfigurationFile(cobraCommand)
@@ -121,10 +121,10 @@ func read() bool {
 		fmt.Println("scheme:", u.Scheme)
 		if strings.HasSuffix(u.Path, "jsonl") || strings.ToUpper(fileType) == "JSONL" {
 			logger.LogMessage(MessageIdFormat, 5, "Validating as a JSONL resource.")
-			fmt.Println("validate jsonl")
+			fmt.Println("shuffle jsonl")
 			return readJSONLResource(inputURL)
 		} else if strings.HasSuffix(u.Path, "gz") || strings.ToUpper(fileType) == "GZ" {
-			fmt.Println("validate gz")
+			fmt.Println("shuffle gz")
 			logger.LogMessage(MessageIdFormat, 6, "Validating a GZ resource.")
 			return readGZResource(inputURL)
 		} else {
@@ -147,7 +147,7 @@ func readJSONLResource(jsonURL string) bool {
 		return false
 	}
 	defer response.Body.Close()
-	validateLines(response.Body)
+	shuffleLines(response.Body)
 	return true
 }
 
@@ -159,7 +159,7 @@ func readJSONLFile(jsonFile string) bool {
 		return false
 	}
 	defer file.Close()
-	validateLines(file)
+	shuffleLines(file)
 	return true
 }
 
@@ -175,7 +175,7 @@ func readStdin() bool {
 	if info.Mode()&os.ModeNamedPipe == os.ModeNamedPipe {
 
 		reader := bufio.NewReader(os.Stdin)
-		validateLines(reader)
+		shuffleLines(reader)
 		return true
 	}
 	logger.LogMessageFromError(MessageIdFormat, 9006, "Fatal error stdin not piped.", err)
@@ -196,7 +196,7 @@ func readGZResource(gzURL string) bool {
 		return false
 	}
 	defer reader.Close()
-	validateLines(reader)
+	shuffleLines(reader)
 	return true
 }
 
@@ -217,8 +217,32 @@ func readGZFile(gzFile string) bool {
 		return false
 	}
 	defer reader.Close()
-	validateLines(reader)
+	shuffleLines(reader)
 	return true
+}
+
+// ----------------------------------------------------------------------------
+func shuffleLines(reader io.Reader) {
+}
+
+// ----------------------------------------------------------------------------
+func readLines(reader io.Reader, lines chan string) {
+	scanner := bufio.NewScanner(reader)
+	totalLines := 0
+	for scanner.Scan() {
+		totalLines++
+		line := strings.TrimSpace(scanner.Text())
+		lines <- line
+	}
+}
+
+// ----------------------------------------------------------------------------
+func writeLines(lines chan string) {
+	totalLines := 0
+	for line := range lines {
+		totalLines++
+		fmt.Println(line)
+	}
 }
 
 // ----------------------------------------------------------------------------
@@ -294,7 +318,7 @@ func loadConfigurationFile(cobraCommand *cobra.Command) {
 
 		// Specify configuration file name.
 
-		viper.SetConfigName("move")
+		viper.SetConfigName("shuffle")
 		viper.SetConfigType("yaml")
 
 		// Define search path order.
