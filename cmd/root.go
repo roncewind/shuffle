@@ -281,11 +281,12 @@ func writeLines(lines chan shuffleLine, countChan chan int) {
 		if rand.Intn(10) < 5 {
 			shuffleGroup.Add(1)
 			//shuffle
-			line.shuffleCount++
+			line.shuffleCount++ //future, multiple shuffle
 			go shuffle(bridgeChan, line, &shuffleGroup)
 			continue
 		}
 		totalLines++
+		fmt.Printf("%d was %d -- %d\n", totalLines, line.initLineNum, line.shuffleCount)
 	}
 
 	// after all the shuffles have happened, close the bridge channel
