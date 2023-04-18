@@ -3,8 +3,10 @@ package shuffle
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/roncewind/go-util/util"
 )
@@ -19,7 +21,6 @@ type record struct {
 }
 
 var recordWG sync.WaitGroup
-var recordMutex sync.Mutex
 
 // ----------------------------------------------------------------------------
 
@@ -28,7 +29,7 @@ var recordMutex sync.Mutex
 func Shuffle[T any](ctx context.Context, in chan T) <-chan T {
 
 	count := 0
-	recordChan := make(chan record, 5)
+	recordChan := make(chan record, 500)
 	outChan := make(chan T)
 	recordWG.Add(1)
 	go func() {
@@ -52,14 +53,17 @@ func Shuffle[T any](ctx context.Context, in chan T) <-chan T {
 
 // shuffle the records
 func doShuffle[T any](ctx context.Context, in chan record, out chan T) {
+	var recordMutex sync.Mutex
 	count := 0
 	go func() {
 		recordWG.Wait()
 		recordMutex.Lock() //lock so we don't use the record channel again
 		close(in)
 	}()
+	distance := 0
+	r := rand.New(rand.NewSource(time.Now().Unix()))
 	for record := range util.OrDone(ctx, in) {
-		if rand.Intn(10) < 7 && recordMutex.TryLock() {
+		if r.Intn(100) < 95 && recordMutex.TryLock() {
 			record := record
 			go func() {
 				recordWG.Add(1)
@@ -71,11 +75,13 @@ func doShuffle[T any](ctx context.Context, in chan record, out chan T) {
 			}()
 		} else {
 			count++
-			fmt.Println(record.item, record.count)
+			distance += int(math.Abs(float64(count - record.initPosition)))
+			fmt.Println(record.initPosition, record.count, count, count-record.initPosition)
 			out <- record.item.(T)
 		}
 
 	}
 	fmt.Println("Total records sent:", count)
+	fmt.Println("Total distance:", distance)
 	close(out)
 }

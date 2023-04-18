@@ -12,11 +12,13 @@ func TestUtil_Shuffle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// generate values from 0 to n
+	n := 2000
 	generateValues := func() chan int {
 		stream := make(chan int)
 		go func() {
 			defer close(stream)
-			for i := 0; i < 20; i++ {
+			for i := 1; i <= n; i++ {
 				stream <- i
 			}
 		}()
@@ -28,7 +30,7 @@ func TestUtil_Shuffle(t *testing.T) {
 		accumulator += item
 	}
 
-	if accumulator != 190 {
+	if accumulator != (n*(n+1))/2 {
 		t.Fatal("error in Shuffle")
 	}
 }
