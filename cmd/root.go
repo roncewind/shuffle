@@ -19,6 +19,7 @@ import (
 
 	"github.com/docktermj/go-xyzzy-helpers/logger"
 	"github.com/roncewind/go-util/util"
+	"github.com/roncewind/shuffle/shuffle"
 	"github.com/senzing/go-common/record"
 	"github.com/senzing/senzing-tools/constant"
 	"github.com/senzing/senzing-tools/envar"
@@ -244,10 +245,12 @@ func shuffleLines(reader io.Reader) {
 		close(readCountChan)
 		close(writeCountChan)
 	}()
-
+	ctx := context.Background()
+	outChan := shuffle.Shuffle(ctx, lineChan, 10000)
 	waitGroup.Add(2)
 	go readLines(reader, lineChan, readCountChan)
-	go writeLines(lineChan, writeCountChan)
+	go writeLines(outChan, writeCountChan)
+	// go writeLines(lineChan, writeCountChan)
 	waitGroup.Wait()
 }
 
@@ -272,7 +275,7 @@ func readLines(reader io.Reader, lines chan shuffleLine, countChan chan int) {
 }
 
 // ----------------------------------------------------------------------------
-func writeLines(lines chan shuffleLine, countChan chan int) {
+func writeLines(lines <-chan shuffleLine, countChan chan int) {
 	defer waitGroup.Done()
 	var shuffleGroup sync.WaitGroup
 	totalLines := 0
@@ -282,7 +285,7 @@ func writeLines(lines chan shuffleLine, countChan chan int) {
 			shuffleGroup.Add(1)
 			//shuffle
 			line.shuffleCount++ //future, multiple shuffle
-			go shuffle(bridgeChan, line, &shuffleGroup)
+			go mix(bridgeChan, line, &shuffleGroup)
 			continue
 		}
 		totalLines++
@@ -303,7 +306,7 @@ func writeLines(lines chan shuffleLine, countChan chan int) {
 }
 
 // ----------------------------------------------------------------------------
-func shuffle(bridgeChan chan (<-chan shuffleLine), line shuffleLine, wg *sync.WaitGroup) {
+func mix(bridgeChan chan (<-chan shuffleLine), line shuffleLine, wg *sync.WaitGroup) {
 	lines := make(chan shuffleLine, 1)
 	bridgeChan <- lines
 	time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)

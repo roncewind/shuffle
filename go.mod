@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/docktermj/go-xyzzy-helpers v0.2.2
+	github.com/roncewind/go-util v0.0.4
 	github.com/senzing/go-common v0.1.2
 	github.com/senzing/senzing-tools v0.1.6-0.20230324173627-5821b863c014
 	github.com/spf13/cobra v1.6.1
@@ -17,7 +18,6 @@ require (
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.7 // indirect
-	github.com/roncewind/go-util v0.0.4 // indirect
 	github.com/senzing/go-logging v1.1.3 // indirect
 	github.com/spf13/afero v1.9.5 // indirect
 	github.com/spf13/cast v1.5.0 // indirect

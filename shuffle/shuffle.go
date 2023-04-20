@@ -2,7 +2,7 @@ package shuffle
 
 import (
 	"context"
-	"fmt"
+	// "fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -33,7 +33,7 @@ func Shuffle[T any](ctx context.Context, in chan T, targetDistance int) <-chan T
 	if bufferSize <= 0 {
 		bufferSize = 1
 	}
-	fmt.Println("bufferSize:", bufferSize)
+	// fmt.Println("bufferSize:", bufferSize)
 	count := 0
 	recordChan := make(chan *record, 5)
 	outChan := make(chan T)
@@ -48,7 +48,7 @@ func Shuffle[T any](ctx context.Context, in chan T, targetDistance int) <-chan T
 			recordChan <- &r
 		}
 		close(recordChan)
-		fmt.Println("Total records received:", count)
+		// fmt.Println("Total records received:", count)
 	}()
 	go doShuffle(ctx, recordChan, outChan)
 	return outChan
@@ -115,7 +115,7 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 		wg.Done()
 	}()
 	wg.Wait()
-	fmt.Println("Total records written:", writeCount)
-	fmt.Println("Total distance:", distance)
-	fmt.Println("Average distance:", distance/writeCount)
+	// fmt.Println("Total records written:", writeCount)
+	// fmt.Println("Total distance:", distance)
+	// fmt.Println("Average distance:", distance/writeCount)
 }
