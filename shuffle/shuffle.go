@@ -21,6 +21,7 @@ type record struct {
 }
 
 var bufferSize int = 1000
+var delayInMillis time.Duration = 1
 
 // ----------------------------------------------------------------------------
 
@@ -95,7 +96,7 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 				writeCount++
 				distance += int(math.Abs(float64(writeCount - item.initPosition)))
 				// pause before each round to allow the writer to fill in the slice
-				time.Sleep(1 * time.Microsecond)
+				time.Sleep(delayInMillis * time.Microsecond)
 				// fmt.Println(item.initPosition, "-->", writeCount, "d=", writeCount-item.initPosition)
 				out <- item.item.(T)
 			}
