@@ -20,18 +20,19 @@ type record struct {
 	initPosition int
 }
 
-var recordWG sync.WaitGroup
+var bufferSize int = 1000
 
 // ----------------------------------------------------------------------------
 
 // input a channel of records to be shuffled
 // output a channel of shuffled records
-func Shuffle[T any](ctx context.Context, in chan T) <-chan T {
+func Shuffle[T any](ctx context.Context, in chan T, targetDistance int) <-chan T {
 
+	bufferSize = int(math.Round(float64(targetDistance) * 1.5))
+	fmt.Println("bufferSize:", bufferSize)
 	count := 0
 	recordChan := make(chan *record, 5)
 	outChan := make(chan T)
-	// recordWG.Add(1)
 	go func() {
 		for item := range util.OrDone(ctx, in) {
 			count++
@@ -42,7 +43,6 @@ func Shuffle[T any](ctx context.Context, in chan T) <-chan T {
 			}
 			recordChan <- &r
 		}
-		// recordWG.Done()
 		close(recordChan)
 		fmt.Println("Total records received:", count)
 	}()
@@ -58,12 +58,12 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 	var wg sync.WaitGroup
 	readCount := 0
 	writeCount := 0
-	bufferSize := 50000
 
 	recordBuffer := make([]*record, bufferSize)
 	distance := 0
 	doneReading := false
 	wg.Add(2)
+	// read from the in channel randomly putting records in slice slots
 	go func() {
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		for item := range util.OrDone(ctx, in) {
@@ -74,11 +74,11 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 			}
 			recordBuffer[slot] = item
 		}
-		fmt.Println("done reading")
 		doneReading = true
 		wg.Done()
 	}()
 
+	// randomly read records from slice slots and put them in the out channel
 	go func() {
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		var item *record
@@ -91,22 +91,22 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 				item, recordBuffer[slot] = recordBuffer[slot], nil
 				writeCount++
 				distance += int(math.Abs(float64(writeCount - item.initPosition)))
-				fmt.Println(item.initPosition, "-->", writeCount, "d=", writeCount-item.initPosition)
+				// pause before each round to allow the writer to fill in the slice
+				time.Sleep(1 * time.Microsecond)
+				// fmt.Println(item.initPosition, "-->", writeCount, "d=", writeCount-item.initPosition)
 				out <- item.item.(T)
 			}
 		}
-		fmt.Println("time to flush")
 		// flush the rest from the buffer
 		for i, item := range recordBuffer {
 			if item != nil {
 				writeCount++
 				distance += int(math.Abs(float64(writeCount - item.initPosition)))
-				fmt.Println(item.initPosition, "-->", writeCount, "d=", writeCount-item.initPosition)
+				// fmt.Println(item.initPosition, "-->", writeCount, "d=", writeCount-item.initPosition)
 				out <- item.item.(T)
 				recordBuffer[i] = nil
 			}
 		}
-		fmt.Println("flushed, goodbye")
 		close(out)
 		wg.Done()
 	}()
@@ -114,41 +114,4 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 	fmt.Println("Total records written:", writeCount)
 	fmt.Println("Total distance:", distance)
 	fmt.Println("Average distance:", distance/writeCount)
-}
-
-// ----------------------------------------------------------------------------
-
-// shuffle the records
-func doShuffleOLD[T any](ctx context.Context, in chan record, out chan T) {
-	var recordMutex sync.Mutex
-	count := 0
-	go func() {
-		recordWG.Wait()
-		recordMutex.Lock() //lock so we don't use the record channel again
-		close(in)
-	}()
-	distance := 0
-	r := rand.New(rand.NewSource(time.Now().Unix()))
-	for record := range util.OrDone(ctx, in) {
-		if r.Intn(100) < 95 && recordMutex.TryLock() {
-			record := record
-			go func() {
-				recordWG.Add(1)
-				defer recordWG.Done()
-				//shuffle
-				record.count++ //future, multiple shuffle
-				in <- record
-				recordMutex.Unlock()
-			}()
-		} else {
-			count++
-			distance += int(math.Abs(float64(count - record.initPosition)))
-			fmt.Println(record.initPosition, record.count, count, count-record.initPosition)
-			out <- record.item.(T)
-		}
-
-	}
-	fmt.Println("Total records sent:", count)
-	fmt.Println("Total distance:", distance)
-	close(out)
 }

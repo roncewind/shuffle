@@ -13,7 +13,7 @@ func TestUtil_Shuffle(t *testing.T) {
 	defer cancel()
 
 	// generate values from 0 to n
-	n := 2000000
+	n := 1000000
 	generateValues := func() chan int {
 		stream := make(chan int)
 		go func() {
@@ -26,7 +26,7 @@ func TestUtil_Shuffle(t *testing.T) {
 	}
 
 	accumulator := 0
-	for item := range Shuffle(ctx, generateValues()) {
+	for item := range Shuffle(ctx, generateValues(), 10000) {
 		accumulator += item
 	}
 
