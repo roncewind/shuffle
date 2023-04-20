@@ -29,6 +29,9 @@ var bufferSize int = 1000
 func Shuffle[T any](ctx context.Context, in chan T, targetDistance int) <-chan T {
 
 	bufferSize = int(math.Round(float64(targetDistance) * 1.5))
+	if bufferSize <= 0 {
+		bufferSize = 1
+	}
 	fmt.Println("bufferSize:", bufferSize)
 	count := 0
 	recordChan := make(chan *record, 5)
