@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/docktermj/go-xyzzy-helpers v0.2.2
-	github.com/roncewind/go-util v0.0.4
+	github.com/roncewind/go-util v0.0.5-0.20230421190856-a5c09dcd8cad
 	github.com/senzing/go-common v0.1.2
 	github.com/senzing/senzing-tools v0.1.6-0.20230324173627-5821b863c014
 	github.com/spf13/cobra v1.6.1

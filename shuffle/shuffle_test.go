@@ -13,7 +13,7 @@ func TestUtil_Shuffle(t *testing.T) {
 	defer cancel()
 
 	// generate values from 0 to n
-	n := 100000
+	n := 1000000
 	generateValues := func() chan int {
 		stream := make(chan int)
 		go func() {

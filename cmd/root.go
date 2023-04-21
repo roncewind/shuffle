@@ -19,7 +19,6 @@ import (
 
 	"github.com/docktermj/go-xyzzy-helpers/logger"
 	"github.com/roncewind/go-util/util"
-	"github.com/roncewind/shuffle/shuffle"
 	"github.com/senzing/go-common/record"
 	"github.com/senzing/senzing-tools/constant"
 	"github.com/senzing/senzing-tools/envar"
@@ -246,7 +245,7 @@ func shuffleLines(reader io.Reader) {
 		close(writeCountChan)
 	}()
 	ctx := context.Background()
-	outChan := shuffle.Shuffle(ctx, lineChan, 10000)
+	outChan := util.Shuffle(ctx, lineChan, 10000)
 	waitGroup.Add(2)
 	go readLines(reader, lineChan, readCountChan)
 	go writeLines(outChan, writeCountChan)

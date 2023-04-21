@@ -31,7 +31,7 @@ var delayInMicros time.Duration = 1
 // output a channel of shuffled records
 func Shuffle[T any](ctx context.Context, in chan T, targetDistance int) <-chan T {
 
-	bufferSize = int(math.Round(float64(targetDistance) * 1.8))
+	bufferSize = int(math.Round(float64(targetDistance) * 1.7))
 	if bufferSize <= 0 {
 		bufferSize = 1
 	}
@@ -64,8 +64,8 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 	var wg sync.WaitGroup
 	readCount := 0
 	writeCount := 0
+	distance := 0
 	var sliceMutex sync.RWMutex
-	var boolMutex sync.RWMutex
 	recordBuffer := make([]*record, bufferSize)
 	getRecordPtr := func(slot int) *record {
 		sliceMutex.RLock()
@@ -73,14 +73,7 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 		sliceMutex.RUnlock()
 		return rptr
 	}
-	distance := 0
-	doneReading := false
-	isReading := func() bool {
-		boolMutex.RLock()
-		b := doneReading
-		boolMutex.RUnlock()
-		return b
-	}
+	doneReading := make(chan struct{})
 	wg.Add(2)
 	// read from the in channel randomly putting records in slice slots
 	go func() {
@@ -95,9 +88,7 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 			recordBuffer[slot] = item
 			sliceMutex.Unlock()
 		}
-		boolMutex.Lock()
-		doneReading = true
-		boolMutex.Unlock()
+		doneReading <- struct{}{}
 		wg.Done()
 	}()
 
@@ -105,12 +96,17 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 	go func() {
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		var item *record
-		for !isReading() {
-			slot := r.Intn(bufferSize)
-			for getRecordPtr(slot) == nil && !isReading() {
-				slot = r.Intn(bufferSize)
-			}
-			if !isReading() {
+	stillReading:
+		for {
+			select {
+			case <-doneReading:
+				break stillReading
+			default:
+				slot := r.Intn(bufferSize)
+				for getRecordPtr(slot) == nil {
+					slot = r.Intn(bufferSize)
+				}
+
 				sliceMutex.Lock()
 				item, recordBuffer[slot] = recordBuffer[slot], nil
 				sliceMutex.Unlock()
@@ -120,6 +116,7 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 				time.Sleep(delayInMicros * time.Microsecond)
 				// fmt.Println(item.initPosition, "-->", writeCount, "d=", writeCount-item.initPosition)
 				out <- item.item.(T)
+
 			}
 		}
 		// flush the rest from the buffer
