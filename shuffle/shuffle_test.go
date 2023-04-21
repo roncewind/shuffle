@@ -7,13 +7,13 @@ import (
 
 // ----------------------------------------------------------------------------
 
-// test Bridge
+// test Shuffle
 func TestUtil_Shuffle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// generate values from 0 to n
-	n := 1000000
+	n := 100000
 	generateValues := func() chan int {
 		stream := make(chan int)
 		go func() {

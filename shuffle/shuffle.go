@@ -2,6 +2,8 @@ package shuffle
 
 import (
 	"context"
+	"fmt"
+
 	// "fmt"
 	"math"
 	"math/rand"
@@ -21,7 +23,7 @@ type record struct {
 }
 
 var bufferSize int = 1000
-var delayInMillis time.Duration = 1
+var delayInMicros time.Duration = 1
 
 // ----------------------------------------------------------------------------
 
@@ -29,7 +31,7 @@ var delayInMillis time.Duration = 1
 // output a channel of shuffled records
 func Shuffle[T any](ctx context.Context, in chan T, targetDistance int) <-chan T {
 
-	bufferSize = int(math.Round(float64(targetDistance) * 1.5))
+	bufferSize = int(math.Round(float64(targetDistance) * 1.8))
 	if bufferSize <= 0 {
 		bufferSize = 1
 	}
@@ -62,10 +64,23 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 	var wg sync.WaitGroup
 	readCount := 0
 	writeCount := 0
-
+	var sliceMutex sync.RWMutex
+	var boolMutex sync.RWMutex
 	recordBuffer := make([]*record, bufferSize)
+	getRecordPtr := func(slot int) *record {
+		sliceMutex.RLock()
+		rptr := recordBuffer[slot]
+		sliceMutex.RUnlock()
+		return rptr
+	}
 	distance := 0
 	doneReading := false
+	isReading := func() bool {
+		boolMutex.RLock()
+		b := doneReading
+		boolMutex.RUnlock()
+		return b
+	}
 	wg.Add(2)
 	// read from the in channel randomly putting records in slice slots
 	go func() {
@@ -73,12 +88,16 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 		for item := range util.OrDone(ctx, in) {
 			readCount++
 			slot := r.Intn(bufferSize)
-			for recordBuffer[slot] != nil {
+			for getRecordPtr(slot) != nil {
 				slot = r.Intn(bufferSize)
 			}
+			sliceMutex.Lock()
 			recordBuffer[slot] = item
+			sliceMutex.Unlock()
 		}
+		boolMutex.Lock()
 		doneReading = true
+		boolMutex.Unlock()
 		wg.Done()
 	}()
 
@@ -86,22 +105,25 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 	go func() {
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		var item *record
-		for !doneReading {
+		for !isReading() {
 			slot := r.Intn(bufferSize)
-			for recordBuffer[slot] == nil && !doneReading {
+			for getRecordPtr(slot) == nil && !isReading() {
 				slot = r.Intn(bufferSize)
 			}
-			if !doneReading {
+			if !isReading() {
+				sliceMutex.Lock()
 				item, recordBuffer[slot] = recordBuffer[slot], nil
+				sliceMutex.Unlock()
 				writeCount++
 				distance += int(math.Abs(float64(writeCount - item.initPosition)))
 				// pause before each round to allow the writer to fill in the slice
-				time.Sleep(delayInMillis * time.Microsecond)
+				time.Sleep(delayInMicros * time.Microsecond)
 				// fmt.Println(item.initPosition, "-->", writeCount, "d=", writeCount-item.initPosition)
 				out <- item.item.(T)
 			}
 		}
 		// flush the rest from the buffer
+		sliceMutex.Lock()
 		for i, item := range recordBuffer {
 			if item != nil {
 				writeCount++
@@ -111,11 +133,12 @@ func doShuffle[T any](ctx context.Context, in chan *record, out chan T) {
 				recordBuffer[i] = nil
 			}
 		}
+		sliceMutex.Unlock()
 		close(out)
 		wg.Done()
 	}()
 	wg.Wait()
-	// fmt.Println("Total records written:", writeCount)
-	// fmt.Println("Total distance:", distance)
-	// fmt.Println("Average distance:", distance/writeCount)
+	fmt.Println("Total records written:", writeCount)
+	fmt.Println("Total distance:", distance)
+	fmt.Println("Average distance:", distance/writeCount)
 }
